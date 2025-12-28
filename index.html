@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>我的 AI 智慧衣櫥 (分類管理修正版)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root { --safe-bottom: env(safe-area-inset-bottom); }
+        body { -webkit-tap-highlight-color: transparent; padding-bottom: calc(80px + var(--safe-bottom)); font-family: -apple-system, sans-serif; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .active-nav { color: #4f46e5; border-top: 3px solid #4f46e5; }
+        .filter-active { background: #4f46e5 !important; color: white !important; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .animate-pop { animation: pop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        @keyframes pop { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-900">
+
+    <header class="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b px-6 pt-12 pb-4 flex justify-between items-end">
+        <div>
+            <h1 class="text-2xl font-black text-indigo-600 tracking-tight">AI CLOSET</h1>
+            <div id="weatherDisplay" class="text-[11px] font-bold text-slate-400 mt-1 flex items-center gap-1">
+                <i class="fas fa-location-dot"></i> 讀取天氣...
+            </div>
+        </div>
+        <div class="flex gap-4 pb-1 text-slate-400">
+            <button onclick="openCatMgr()" class="text-indigo-600 bg-indigo-50 px-3 py-1 rounded-lg text-xs font-bold border border-indigo-100">
+                <i class="fas fa-tags"></i> 分類管理
+            </button>
+            <button onclick="exportData()"><i class="fas fa-file-export"></i></button>
+            <button onclick="document.getElementById('importFile').click()"><i class="fas fa-file-import"></i></button>
+            <input type="file" id="importFile" class="hidden" onchange="importData(event)">
+        </div>
+    </header>
+
+    <main class="p-4">
+        <section id="wardrobeSection" class="tab-content active">
+            <div class="flex gap-2 overflow-x-auto no-scrollbar mb-4 pb-2" id="catBar"></div>
+            <div id="grid" class="grid grid-cols-2 gap-4"></div>
+            <div id="emptyMsg" class="hidden text-center py-20 text-slate-300">尚未新增任何單品</div>
+        </section>
+
+        <section id="outfitSection" class="tab-content">
+            <div class="bg-indigo-600 rounded-[32px] p-6 text-white mb-6 shadow-xl">
+                <h3 class="font-bold text-lg mb-1">今日穿搭提案</h3>
+                <p id="weatherAdvice" class="text-xs opacity-80 mb-5">正在獲取氣象建議...</p>
+                <div class="space-y-3">
+                    <input type="text" id="moodInput" placeholder="輸入關鍵字 (如：約會)" class="w-full bg-white/20 border border-white/20 rounded-2xl py-3 px-4 text-sm outline-none placeholder:text-white/50">
+                    <button onclick="generateAI()" class="w-full bg-white text-indigo-600 font-black py-4 rounded-2xl shadow-lg active:scale-95 transition">隨機產生</button>
+                </div>
+            </div>
+            <div id="aiResult"></div>
+        </section>
+
+        <section id="statsSection" class="tab-content">
+            <div class="grid grid-cols-2 gap-4 mb-6">
+                <div class="bg-white p-5 rounded-3xl shadow-sm border border-slate-100">
+                    <p class="text-[10px] font-bold text-slate-400 mb-1">總價值</p>
+                    <p id="statPrice" class="text-xl font-black text-indigo-600">$0</p>
+                </div>
+                <div class="bg-white p-5 rounded-3xl shadow-sm border border-slate-100">
+                    <p class="text-[10px] font-bold text-slate-400 mb-1">總件數</p>
+                    <p id="statCount" class="text-xl font-black text-indigo-600">0 件</p>
+                </div>
+            </div>
+            <h3 class="font-bold mb-4">建議斷捨離</h3>
+            <div id="cleanup" class="space-y-3"></div>
+        </section>
+    </main>
+
+    <nav class="fixed bottom-0 left-0 right-0 bg-white border-t flex justify-around items-center h-20 z-50 px-4 pb-safe">
+        <button onclick="switchTab('wardrobe')" class="nav-btn active-nav flex flex-col items-center gap-1 w-1/4"><i class="fas fa-th-large text-lg"></i><span class="text-[9px] font-bold">衣櫥</span></button>
+        <button onclick="switchTab('outfit')" class="nav-btn flex flex-col items-center gap-1 w-1/4"><i class="fas fa-wand-magic-sparkles text-lg"></i><span class="text-[9px] font-bold">AI 提案</span></button>
+        <div class="w-1/4 flex justify-center">
+            <button onclick="openAdd()" class="bg-indigo-600 text-white w-14 h-14 rounded-full -mt-10 shadow-2xl flex items-center justify-center text-xl border-[6px] border-slate-50 active:scale-90 transition"><i class="fas fa-plus"></i></button>
+        </div>
+        <button onclick="switchTab('stats')" class="nav-btn flex flex-col items-center gap-1 w-1/4"><i class="fas fa-chart-line text-lg"></i><span class="text-[9px] font-bold">分析</span></button>
+    </nav>
+
+    <div id="catMgrModal" class="fixed inset-0 bg-black/80 z-[100] hidden flex items-center justify-center p-6">
+        <div class="bg-white w-full max-w-sm rounded-[32px] p-6 shadow-2xl">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="font-black text-lg">管理自訂分類</h3>
+                <button onclick="closeCatMgr()" class="text-slate-300 text-2xl">&times;</button>
+            </div>
+            <div class="space-y-2 mb-6 max-h-60 overflow-y-auto pr-2" id="catListContainer"></div>
+            <div class="flex gap-2">
+                <input type="text" id="newCatInput" placeholder="輸入新分類..." class="flex-1 bg-slate-100 p-3 rounded-xl outline-none text-sm">
+                <button onclick="addCategory()" class="bg-indigo-600 text-white px-5 rounded-xl font-bold">新增</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="itemModal" class="fixed inset-0 bg-black/80 z-[80] hidden flex items-end">
+        <div class="bg-white w-full rounded-t-[40px] p-8 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-6">
+                <h2 id="modalTitle" class="text-xl font-black">新增衣物</h2>
+                <button onclick="closeModal()" class="text-slate-300 text-3xl">&times;</button>
+            </div>
+            <div class="space-y-5">
+                <div class="flex gap-4">
+                    <div class="w-28 h-28 bg-slate-50 rounded-3xl relative overflow-hidden flex items-center justify-center border-2 border-dashed border-slate-200">
+                        <i class="fas fa-camera text-slate-300 text-2xl"></i>
+                        <input type="file" id="itemImg" accept="image/*" class="absolute inset-0 opacity-0" onchange="previewImg(this)">
+                        <img id="preview" class="absolute inset-0 w-full h-full object-cover hidden">
+                    </div>
+                    <div class="flex-1 space-y-2">
+                        <input type="text" id="itemName" placeholder="單品名稱" class="w-full bg-slate-100 p-3 rounded-xl outline-none">
+                        <select id="itemCat" class="w-full bg-slate-100 p-3 rounded-xl outline-none"></select>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <input type="number" id="itemPrice" placeholder="價格" class="bg-slate-100 p-3 rounded-xl outline-none">
+                    <input type="date" id="itemDate" class="bg-slate-100 p-3 rounded-xl outline-none">
+                </div>
+                <div class="pt-4 flex gap-3">
+                    <button id="delBtn" onclick="deleteItem()" class="bg-red-50 text-red-500 w-14 h-14 rounded-2xl hidden"><i class="fas fa-trash"></i></button>
+                    <button onclick="saveItem()" class="flex-1 bg-indigo-600 text-white py-4 rounded-2xl font-black shadow-lg">儲存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 初始化 state
+        let state = JSON.parse(localStorage.getItem('wardrobe_v7')) || { 
+            items: [], 
+            cats: ["上衣", "下著", "外套", "鞋子", "配件"] 
+        };
+        let currentFilter = "全部";
+        let editingId = null;
+
+        window.onload = () => { detectWeather(); render(); };
+
+        function render() {
+            renderCatBar();
+            renderGrid();
+            renderStats();
+            localStorage.setItem('wardrobe_v7', JSON.stringify(state));
+        }
+
+        // 渲染分類按鈕
+        function renderCatBar() {
+            const bar = document.getElementById('catBar');
+            const counts = {};
+            state.items.forEach(i => counts[i.cat] = (counts[i.cat] || 0) + 1);
+            bar.innerHTML = ["全部", ...state.cats].map(c => {
+                const num = (c === "全部") ? state.items.length : (counts[c] || 0);
+                return `<button onclick="setFilter('${c}')" class="${currentFilter===c?'filter-active':'bg-white text-slate-500'} px-5 py-2 rounded-2xl text-[11px] font-black shadow-sm transition whitespace-nowrap">
+                    ${c} <span class="opacity-40 ml-1">${num}</span>
+                </button>`;
+            }).join('');
+        }
+
+        function setFilter(f) { currentFilter = f; render(); }
+
+        // 管理分類功能
+        window.openCatMgr = function() {
+            const container = document.getElementById('catListContainer');
+            container.innerHTML = state.cats.map(c => `
+                <div class="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-100">
+                    <span class="text-sm font-bold text-slate-700">${c}</span>
+                    <button onclick="removeCategory('${c}')" class="text-red-400 p-1"><i class="fas fa-trash-alt"></i></button>
+                </div>
+            `).join('');
+            document.getElementById('catMgrModal').classList.remove('hidden');
+        };
+
+        window.closeCatMgr = () => { document.getElementById('catMgrModal').classList.add('hidden'); render(); };
+
+        window.addCategory = function() {
+            const input = document.getElementById('newCatInput');
+            const name = input.value.trim();
+            if(name && !state.cats.includes(name)) {
+                state.cats.push(name);
+                input.value = "";
+                openCatMgr();
+            } else if(state.cats.includes(name)) {
+                alert('此分類已存在');
+            }
+        };
+
+        window.removeCategory = function(name) {
+            if(confirm(`刪除「${name}」分類？已標記此分類的衣物將不會被刪除，但分類標籤會變空。`)) {
+                state.cats = state.cats.filter(c => c !== name);
+                openCatMgr();
+            }
+        };
+
+        // 衣物管理功能
+        function renderGrid() {
+            const grid = document.getElementById('grid');
+            const filtered = state.items.filter(i => currentFilter === "全部" || i.cat === currentFilter);
+            document.getElementById('emptyMsg').classList.toggle('hidden', filtered.length > 0);
+            grid.innerHTML = filtered.map(i => `
+                <div onclick="openEdit(${i.id})" class="bg-white rounded-[24px] overflow-hidden shadow-sm border border-slate-100 animate-pop">
+                    <img src="${i.img}" class="w-full aspect-square object-cover">
+                    <div class="p-3">
+                        <p class="text-[9px] font-black text-indigo-500 uppercase">${i.cat}</p>
+                        <p class="font-bold text-xs truncate">${i.name}</p>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function openAdd() {
+            editingId = null;
+            document.getElementById('modalTitle').innerText = "新增衣物";
+            document.getElementById('itemName').value = "";
+            document.getElementById('itemPrice').value = "";
+            document.getElementById('preview').classList.add('hidden');
+            document.getElementById('delBtn').classList.add('hidden');
+            document.getElementById('itemCat').innerHTML = state.cats.map(c => `<option value="${c}">${c}</option>`).join('');
+            document.getElementById('itemModal').classList.remove('hidden');
+        }
+
+        function openEdit(id) {
+            editingId = id;
+            const item = state.items.find(i => i.id === id);
+            document.getElementById('modalTitle').innerText = "編輯衣物";
+            document.getElementById('itemName').value = item.name;
+            document.getElementById('itemPrice').value = item.price;
+            document.getElementById('itemDate').value = item.date;
+            document.getElementById('preview').src = item.img;
+            document.getElementById('preview').classList.remove('hidden');
+            document.getElementById('delBtn').classList.remove('hidden');
+            document.getElementById('itemCat').innerHTML = state.cats.map(c => `<option value="${c}" ${c===item.cat?'selected':''}>${c}</option>`).join('');
+            document.getElementById('itemModal').classList.remove('hidden');
+        }
+
+        function saveItem() {
+            const name = document.getElementById('itemName').value;
+            const img = document.getElementById('preview').src;
+            if(!name || img.includes('camera')) return alert('請填寫完整資訊');
+            const item = {
+                id: editingId || Date.now(),
+                name, img,
+                cat: document.getElementById('itemCat').value,
+                price: document.getElementById('itemPrice').value,
+                date: document.getElementById('itemDate').value || new Date().toISOString().split('T')[0]
+            };
+            if(editingId) state.items = state.items.map(i => i.id === editingId ? item : i);
+            else state.items.push(item);
+            closeModal(); render();
+        }
+
+        function deleteItem() {
+            if(confirm('確定刪除？')) { state.items = state.items.filter(i => i.id !== editingId); closeModal(); render(); }
+        }
+
+        // 天氣與基礎工具
+        async function detectWeather() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(async (pos) => {
+                    const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${pos.coords.latitude}&longitude=${pos.coords.longitude}&current_weather=true`);
+                    const data = await res.json();
+                    const temp = data.current_weather.temperature;
+                    document.getElementById('weatherDisplay').innerHTML = `<i class="fas fa-temperature-low"></i> 當前氣溫 ${temp}°C`;
+                    document.getElementById('weatherAdvice').innerText = temp < 18 ? "氣溫較涼，AI 建議搭配外套。" : "氣溫舒適，適合輕便穿搭。";
+                });
+            }
+        }
+
+        function previewImg(input) {
+            const reader = new FileReader();
+            reader.onload = e => { 
+                document.getElementById('preview').src = e.target.result;
+                document.getElementById('preview').classList.remove('hidden');
+            };
+            reader.readAsDataURL(input.files[0]);
+        }
+
+        function renderStats() {
+            const total = state.items.reduce((s, i) => s + (Number(i.price)||0), 0);
+            document.getElementById('statPrice').innerText = `$${total.toLocaleString()}`;
+            document.getElementById('statCount').innerText = `${state.items.length} 件`;
+        }
+
+        function generateAI() {
+            const mood = document.getElementById('moodInput').value.toLowerCase();
+            const result = document.getElementById('aiResult');
+            let pool = state.items;
+            if(mood) pool = pool.filter(i => i.name.toLowerCase().includes(mood) || i.cat.includes(mood));
+            const tops = pool.filter(i => i.cat === "上衣");
+            const bottoms = pool.filter(i => i.cat === "下著");
+            if(tops.length && bottoms.length) {
+                const t = tops[Math.floor(Math.random()*tops.length)];
+                const b = bottoms[Math.floor(Math.random()*bottoms.length)];
+                result.innerHTML = `<div class="bg-white p-4 rounded-[32px] shadow-sm flex gap-2"><img src="${t.img}" class="w-1/2 rounded-2xl object-cover h-48"><img src="${b.img}" class="w-1/2 rounded-2xl object-cover h-48"></div>`;
+            } else { result.innerHTML = `<p class="text-center text-slate-400 py-10">找不到符合的上衣與下著</p>`; }
+        }
+
+        function switchTab(t) {
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            document.getElementById(t + 'Section').classList.add('active');
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active-nav'));
+            event.currentTarget.classList.add('active-nav');
+        }
+        function closeModal() { document.getElementById('itemModal').classList.add('hidden'); }
+        function exportData() {
+            const blob = new Blob([JSON.stringify(state)], {type: 'application/json'});
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'wardrobe.json'; a.click();
+        }
+        function importData(e) {
+            const reader = new FileReader();
+            reader.onload = ev => { state = JSON.parse(ev.target.result); render(); alert('匯入成功'); };
+            reader.readAsText(e.target.files[0]);
+        }
+    </script>
+</body>
+</html>
